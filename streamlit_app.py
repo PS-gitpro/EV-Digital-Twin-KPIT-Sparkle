@@ -4,7 +4,7 @@ import numpy as np
 
 st.set_page_config(
     page_title="Team TIGONS - EV Digital Twin",
-    page_icon="🐅",
+    page_icon="🔋",
     layout="wide"
 )
 
@@ -13,7 +13,7 @@ def main():
     st.markdown("### 🐅 Team TIGONS - KPIT Sparkle 2025")
     st.markdown("**Jayawantrao Sawant College of Engineering, Pune**")
     
-    # Team Info Sidebar
+    # Team Info
     with st.sidebar:
         st.header("👥 Team TIGONS")
         st.write("**Team Leader:** Rupesh Manore")
@@ -21,17 +21,13 @@ def main():
         st.write("**Mentor:** Prof. N.V. Tayade")
         st.write("**Email:** rupeshmanore2004@gmail.com")
         st.write("**GitHub:** [Project Repository](https://github.com/PS-gitpro/EV-Digital-Twin-KPIT-Sparkle)")
-        
-        st.markdown("---")
-        st.subheader("🚀 Live Deployment")
-        st.success("This app is deployed on Streamlit Cloud")
-        st.info("Judges can test our project in real-time!")
+        st.success("🚀 Live Deployment Active")
     
-    # Main Content
+    # Tabs
     tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🤖 AI Demo", "🏆 Project Info"])
     
     with tab1:
-        st.subheader("🔋 Battery Simulation Dashboard")
+        st.header("Battery Monitoring Dashboard")
         
         col1, col2 = st.columns(2)
         
@@ -42,83 +38,68 @@ def main():
             st.metric("Temperature", "32°C", "+4°C")
             st.metric("State of Charge", "78%", "-5%")
             
-            # Simple battery visualization
-            soc = st.slider("Battery Charge Level", 0, 100, 75)
-            st.progress(soc / 100)
-            st.write(f"Battery Level: {soc}%")
+            # Battery level
+            battery_level = st.slider("Battery Level", 0, 100, 75)
+            st.progress(battery_level / 100)
+            st.write(f"Charge: {battery_level}%")
         
         with col2:
-            st.subheader("Performance Analytics")
+            st.subheader("Performance Data")
             
-            # Generate simple chart data
-            time = np.linspace(0, 100, 50)
-            voltage = 4.2 - 0.03 * time + 0.1 * np.sin(0.3 * time)
-            
+            # Simple line chart using Streamlit's built-in
             chart_data = pd.DataFrame({
-                'Time (s)': time,
-                'Voltage (V)': voltage
+                'Time': range(50),
+                'Voltage': 4.2 - 0.03 * np.arange(50) + 0.1 * np.sin(0.3 * np.arange(50))
             })
-            
-            st.line_chart(chart_data.set_index('Time (s)'))
+            st.line_chart(chart_data.set_index('Time'))
     
     with tab2:
-        st.subheader("🤖 AI-Powered Predictions")
+        st.header("AI Failure Prediction")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Failure Risk Assessment")
+            risk = st.slider("Failure Risk Score", 0.0, 1.0, 0.59)
             
-            risk_score = st.slider("Risk Score", 0.0, 1.0, 0.59)
-            
-            if risk_score < 0.3:
-                status = "✅ LOW RISK"
-                color = "green"
-            elif risk_score < 0.7:
-                status = "⚠️ MEDIUM RISK"
-                color = "orange"
+            if risk < 0.3:
+                st.success(f"✅ LOW RISK: {risk:.2f}")
+                st.progress(risk)
+            elif risk < 0.7:
+                st.warning(f"⚠️ MEDIUM RISK: {risk:.2f}")
+                st.progress(risk)
             else:
-                status = "🚨 HIGH RISK"
-                color = "red"
-            
-            st.metric("AI Risk Assessment", f"{risk_score:.2f}", status)
-            
-            # Simple gauge using progress bar
-            st.write("Failure Risk Level:")
-            st.progress(risk_score)
+                st.error(f"🚨 HIGH RISK: {risk:.2f}")
+                st.progress(risk)
         
         with col2:
-            st.subheader("💡 Optimization Suggestions")
-            st.success("• Optimize charging patterns")
-            st.warning("• Improve thermal management")
-            st.info("• Reduce peak current loads")
-            st.error("• Schedule maintenance soon")
+            st.subheader("Recommendations")
+            st.info("• Optimize charging cycles")
+            st.info("• Monitor temperature closely")
+            st.info("• Schedule maintenance")
+            st.info("• Update firmware")
     
     with tab3:
-        st.subheader("🏆 KPIT Sparkle 2025 Submission")
+        st.header("KPIT Sparkle 2025 Submission")
         
-        st.success("**Category:** AI-Driven Contextual Reasoning for Software Engineering Excellence")
-        st.success("**Innovation:** AI-Augmented Digital Twin for EV Battery Systems")
-        st.success("**Impact:** 70% reduction in EV testing costs")
+        st.success("**Category:** AI-Driven Contextual Reasoning")
+        st.success("**Innovation:** EV Battery Digital Twin")
+        st.success("**Impact:** 70% cost reduction in testing")
         
         st.markdown("""
-        ### 🎯 Project Highlights:
-        - **Virtual Battery Testing** - No physical hardware needed
-        - **AI Failure Prediction** - Machine learning models
-        - **Real-time Analytics** - Live monitoring dashboard
-        - **Cost-Effective** - 70% cheaper than physical testing
+        ### 🎯 Project Features:
+        - Virtual battery testing environment
+        - AI-powered failure prediction
+        - Real-time monitoring dashboard
+        - Cost-effective R&D platform
         
-        ### 🔧 Technical Stack:
-        - Python + Streamlit for web interface
-        - PyBaMM for battery simulation
-        - Scikit-learn for AI predictions
-        - Plotly for data visualization
+        ### 💼 Business Value:
+        - Startups: Affordable EV development
+        - Education: Engineering learning tool
+        - Industry: Predictive maintenance
         """)
         
         st.balloons()
-        
-        st.markdown("---")
-        st.success("🚀 **Project Successfully Deployed - Judges can access our live demo!**")
+        st.success("🎉 **Project Successfully Deployed on Streamlit Cloud!**")
 
 if __name__ == "__main__":
     main()
