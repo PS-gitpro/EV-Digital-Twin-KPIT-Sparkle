@@ -1,10 +1,7 @@
 pybamm==23.5
 streamlit==1.28.0
 plotly==5.15.0
-torch==2.0.1
 pandas==2.0.3
 numpy==1.24.3
 scikit-learn==1.3.0
-langchain==0.0.346
-chromadb==0.4.15
 openpyxl==3.1.2
