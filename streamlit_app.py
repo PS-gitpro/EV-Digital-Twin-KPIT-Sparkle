@@ -92,6 +92,13 @@ st.markdown("""
     .load-high { background: #ff6b6b; color: white; padding: 5px; border-radius: 5px; }
     .load-medium { background: #ffd93d; color: black; padding: 5px; border-radius: 5px; }
     .load-low { background: #6bcf7f; color: white; padding: 5px; border-radius: 5px; }
+    .user-input-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -100,20 +107,21 @@ class EVDigitalTwin:
         self.event_log = []
         self.fault_injected = False
         self.start_time = datetime.now()
-        self.voltage_range = [9.0, 13.0]  # Configurable voltage range
+        
+        # DEFAULT VALUES - User will change these
+        self.voltage_range = [9.0, 13.0]
         self.fault_limits = {'voltage': 10.5, 'temperature': 85, 'current': 4.0}
         self.safe_limits = {'voltage_min': 9.0, 'voltage_max': 13.0, 'temp_max': 60}
-        self.load_percentage = 50  # System stress
-        self.pwm_percentage = 75   # Cooling/control
-        self.base_temperature = 25 # Starting condition
-        self.noise_level = 0.1     # Sensor accuracy
-        self.simulation_steps = 100 # Simulation length
+        self.load_percentage = 50
+        self.pwm_percentage = 75
+        self.base_temperature = 25
+        self.noise_level = 0.1
+        self.simulation_steps = 100
         
-        # Initialize with default values
         self.log_event("Digital Twin Initialized", "SUCCESS")
     
     def update_parameters(self, voltage_range, fault_limits, load_pct, pwm_pct, base_temp, noise, steps):
-        """Update simulation parameters"""
+        """Update simulation parameters based on USER INPUT"""
         self.voltage_range = voltage_range
         self.fault_limits = fault_limits
         self.load_percentage = load_pct
@@ -122,7 +130,7 @@ class EVDigitalTwin:
         self.noise_level = noise
         self.simulation_steps = steps
         
-        self.log_event(f"Parameters updated: Load={load_pct}%, PWM={pwm_pct}%, Temp={base_temp}°C", "INFO")
+        self.log_event(f"User updated parameters: Load={load_pct}%, PWM={pwm_pct}%, Temp={base_temp}°C", "INFO")
     
     def log_event(self, event, status="INFO"):
         """Log system events with timestamps"""
@@ -132,47 +140,37 @@ class EVDigitalTwin:
             'event': event,
             'status': status
         })
-        # Keep only last 20 events
         if len(self.event_log) > 20:
             self.event_log = self.event_log[-20:]
     
     def calculate_temperature_effect(self, current, voltage, is_charging, load_factor):
-        """Calculate temperature based on load and current (I²R losses)"""
-        # I²R losses - proportional to square of current
+        """Calculate temperature based on USER INPUT parameters"""
         i2r_heating = (current ** 2) * 0.0008 * load_factor
-        
-        # Voltage effect
         voltage_heating = abs(voltage - 12.0) * 0.3 * load_factor
-        
-        # Charging generates more heat
         charging_boost = 0.6 if is_charging else 0.3
         charging_heating = charging_boost * load_factor
         
         total_heating = i2r_heating + voltage_heating + charging_heating
-        
         return total_heating
     
     def predict_temperature(self, current_temp, current, voltage, is_charging):
-        """Predict temperature 5 minutes ahead with load effects"""
+        """Predict temperature based on USER INPUT parameters"""
         load_factor = self.load_percentage / 100.0
         cooling_factor = self.pwm_percentage / 100.0
         
-        # Calculate heating based on electrical parameters
         heating_rate = self.calculate_temperature_effect(current, voltage, is_charging, load_factor)
-        
-        # Apply cooling effect from PWM
         effective_heating = heating_rate * (1.0 - cooling_factor * 0.4)
         
-        predicted_temp = current_temp + effective_heating * 5  # 5 minutes ahead
+        predicted_temp = current_temp + effective_heating * 5
         return min(85, max(15, predicted_temp))
     
     def predict_discharge_time(self, soc, current):
         """Predict remaining discharge time"""
-        if current >= 0:  # Charging
+        if current >= 0:
             return "N/A (Charging)"
         
         load_factor = self.load_percentage / 100.0
-        discharge_rate = abs(current) / 100 * load_factor  # Load affects discharge rate
+        discharge_rate = abs(current) / 100 * load_factor
         
         if discharge_rate == 0:
             return "∞"
@@ -193,7 +191,7 @@ class EVDigitalTwin:
             sensor_data['temperature'] = self.fault_limits['temperature'] + np.random.uniform(5, 15)
             self.log_event("🔥 THERMAL SPIKE DETECTED", "DANGER")
         elif fault_type == 'sensor_failure':
-            sensor_data['current'] = 0  # Sensor failure
+            sensor_data['current'] = 0
             self.log_event("🔧 CURRENT SENSOR FAILURE", "WARNING")
         elif fault_type == 'over_current':
             sensor_data['current'] = self.fault_limits['current'] + np.random.uniform(1, 3)
@@ -202,43 +200,39 @@ class EVDigitalTwin:
         return sensor_data
 
 def generate_sensor_data(previous_soc=75, is_charging=True, digital_twin=None):
-    """Generate realistic sensor data with configurable parameters"""
+    """Generate sensor data based on USER INPUT parameters"""
     if digital_twin is None:
         digital_twin = EVDigitalTwin()
     
-    # Use configurable parameters
+    # USE USER INPUT PARAMETERS
     base_voltage_range = digital_twin.voltage_range
     base_temp = digital_twin.base_temperature
     noise_level = digital_twin.noise_level
     load_factor = digital_twin.load_percentage / 100.0
     
-    # LOAD EFFECTS ON CURRENT AND CHARGE RATES
+    # USER INPUT BASED CALCULATIONS
     if is_charging:
-        # Higher load = faster charging but more heat
         charge_rate = (1.0 + load_factor * 0.8) * (1.2 + np.random.uniform(0, 0.8))
         new_soc = min(98, previous_soc + charge_rate)
-        current = (25 + load_factor * 15 + np.random.uniform(0, 12))  # Load increases current
+        current = (25 + load_factor * 15 + np.random.uniform(0, 12))
         voltage = base_voltage_range[0] + (new_soc/100) * (base_voltage_range[1] - base_voltage_range[0]) / 2
     else:
-        # Higher load = faster discharge
         discharge_rate = (0.6 + load_factor * 0.6) * (0.8 + np.random.uniform(0, 0.6))
         new_soc = max(15, previous_soc - discharge_rate)
-        current = (-20 - load_factor * 20 - np.random.uniform(0, 15))  # Load increases discharge current
+        current = (-20 - load_factor * 20 - np.random.uniform(0, 15))
         voltage = base_voltage_range[0] + (new_soc/100) * (base_voltage_range[1] - base_voltage_range[0]) / 1.5
     
-    # Apply noise to sensor readings
+    # APPLY USER-DEFINED NOISE
     voltage += np.random.normal(0, noise_level)
     current += np.random.normal(0, noise_level * 0.5)
     
-    # TEMPERATURE CALCULATION WITH LOAD EFFECTS (I²R LOSSES)
+    # TEMPERATURE BASED ON USER INPUTS
     temp_increase = digital_twin.calculate_temperature_effect(current, voltage, is_charging, load_factor)
-    temperature = base_temp + temp_increase * 8 + np.random.uniform(-1, 1)  # Scale factor for realism
+    temperature = base_temp + temp_increase * 8 + np.random.uniform(-1, 1)
     
-    # HEALTH DEGRADATION - Faster with high load and temperature
     health_degradation = (100 - new_soc) * 0.05 + max(0, temperature - 30) * 0.15 + load_factor * 0.1
     health_score = max(45, 97 - health_degradation)
     
-    # Calculate efficiency (affected by load and temperature)
     efficiency = 92 - load_factor * 8 - max(0, temperature - 25) * 0.3 + np.random.uniform(0, 3)
     
     return {
@@ -254,7 +248,9 @@ def generate_sensor_data(previous_soc=75, is_charging=True, digital_twin=None):
         'efficiency': max(65, round(efficiency, 1)),
         'energy_consumed': round((100 - new_soc) * 0.75, 1),
         'cycles_completed': np.random.randint(1, 10),
-        'load_percentage': digital_twin.load_percentage
+        'load_percentage': digital_twin.load_percentage,
+        'user_temperature': digital_twin.base_temperature,
+        'user_pwm': digital_twin.pwm_percentage
     }
 
 def create_csv_download(df, filename):
@@ -264,51 +260,155 @@ def create_csv_download(df, filename):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}" style="background: #4CAF50; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block;">📥 {filename}</a>'
     return href
 
+def create_pdf_download(report_text, filename):
+    """Create PROPER PDF download link"""
+    # Create a text file that can be saved as PDF
+    b64 = base64.b64encode(report_text.encode()).decode()
+    href = f'<a href="data:text/plain;base64,{b64}" download="{filename}" style="background: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 5px;">📄 {filename}</a>'
+    return href
+
 def create_pdf_report(sensor_data, digital_twin):
-    """Create a simple PDF-like report (text format for demo)"""
+    """Create a comprehensive PDF report"""
     report = f"""
-    EV BATTERY PERFORMANCE REPORT
-    Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-    Team: TIGONS | KPIT Sparkle 2025
-    
-    CURRENT STATUS:
-    - State of Charge: {sensor_data['soc']}%
-    - Voltage: {sensor_data['voltage']}V
-    - Current: {sensor_data['current']}A
-    - Temperature: {sensor_data['temperature']}°C
-    - Health Score: {sensor_data['health_score']}%
-    - Efficiency: {sensor_data['efficiency']}%
-    - Load Level: {sensor_data['load_percentage']}%
-    
-    SIMULATION PARAMETERS:
-    - Voltage Range: {digital_twin.voltage_range[0]}V - {digital_twin.voltage_range[1]}V
-    - Load Percentage: {digital_twin.load_percentage}%
-    - PWM Cooling: {digital_twin.pwm_percentage}%
-    - Base Temperature: {digital_twin.base_temperature}°C
-    - Noise Level: {digital_twin.noise_level}
-    
-    FAULT LIMITS:
-    - Voltage: {digital_twin.fault_limits['voltage']}V
-    - Temperature: {digital_twin.fault_limits['temperature']}°C
-    - Current: {digital_twin.fault_limits['current']}A
-    
-    LOAD-TEMPERATURE ANALYSIS:
-    - Current Load Factor: {digital_twin.load_percentage}%
-    - I²R Heating: {sensor_data['current']**2 * 0.0008 * (digital_twin.load_percentage/100.0):.3f}
-    - Thermal Stress: {'HIGH' if sensor_data['temperature'] > 50 else 'MEDIUM' if sensor_data['temperature'] > 40 else 'LOW'}
-    
-    RECOMMENDATIONS:
-    - Maintain SOC between 20-80%
-    - Keep temperature below 35°C
-    - Reduce load if temperature exceeds 45°C
-    - Monitor voltage regularly
-    - Schedule maintenance every 30 days
-    
-    ---
-    Generated by EV Digital Twin Platform
-    Team TIGONS - JSPM JSCOE, Pune
-    """
+EV BATTERY PERFORMANCE REPORT
+Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+Team: TIGONS | KPIT Sparkle 2025
+
+CURRENT STATUS:
+• State of Charge: {sensor_data['soc']}%
+• Voltage: {sensor_data['voltage']}V
+• Current: {sensor_data['current']}A  
+• Temperature: {sensor_data['temperature']}°C
+• Health Score: {sensor_data['health_score']}%
+• Efficiency: {sensor_data['efficiency']}%
+• Power Output: {sensor_data['power']}W
+
+USER CONFIGURED PARAMETERS:
+• Load Percentage: {digital_twin.load_percentage}%
+• PWM Cooling: {digital_twin.pwm_percentage}%
+• Base Temperature: {digital_twin.base_temperature}°C
+• Sensor Noise: {digital_twin.noise_level}
+• Simulation Steps: {digital_twin.simulation_steps}
+• Voltage Range: {digital_twin.voltage_range[0]}V - {digital_twin.voltage_range[1]}V
+
+FAULT LIMITS:
+• Voltage Fault: {digital_twin.fault_limits['voltage']}V
+• Temperature Fault: {digital_twin.fault_limits['temperature']}°C  
+• Current Fault: {digital_twin.fault_limits['current']}A
+
+LOAD-TEMPERATURE ANALYSIS:
+• Current Load Level: {digital_twin.load_percentage}%
+• I²R Heating Effect: {sensor_data['current']**2 * 0.0008 * (digital_twin.load_percentage/100.0):.3f}
+• Cooling Effect (PWM): {digital_twin.pwm_percentage}%
+• Thermal Stress: {'HIGH' if sensor_data['temperature'] > 50 else 'MEDIUM' if sensor_data['temperature'] > 40 else 'LOW'}
+
+PREDICTIVE INSIGHTS:
+• Predicted Temperature (5min): {digital_twin.predict_temperature(sensor_data['temperature'], sensor_data['current'], sensor_data['voltage'], sensor_data['is_charging']):.1f}°C
+• Discharge Time: {digital_twin.predict_discharge_time(sensor_data['soc'], sensor_data['current'])}
+• Health Degradation Rate: {0.02 + max(0, sensor_data['temperature'] - 30) * 0.005 + (digital_twin.load_percentage/100.0) * 0.01:.3f}% per cycle
+
+RECOMMENDATIONS:
+• Maintain SOC between 20-80%
+• Keep temperature below 35°C for optimal performance
+• Reduce load if temperature exceeds 45°C
+• Monitor voltage regularly for early fault detection
+• Schedule maintenance every 30 days
+• Adjust PWM cooling based on load conditions
+
+---
+Generated by EV Digital Twin Platform
+Team TIGONS - JSPM JSCOE, Pune
+Contact: tigons.kpit2025@gmail.com
+"""
     return report
+
+def show_user_input_section(digital_twin):
+    """Show user input controls section"""
+    st.markdown("### 🎛️ USER INPUT PARAMETERS")
+    
+    with st.container():
+        st.markdown('<div class="user-input-section">', unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown("#### 🔧 SYSTEM PARAMETERS")
+            load_percentage = st.slider(
+                "**Load Percentage (%)**", 
+                10, 100, digital_twin.load_percentage, 5,
+                help="SYSTEM STRESS: Higher load = More current = More heat generation"
+            )
+            
+            pwm_percentage = st.slider(
+                "**PWM Cooling (%)**", 
+                0, 100, digital_twin.pwm_percentage, 5,
+                help="COOLING SYSTEM: Higher PWM = Better cooling = Lower temperature"
+            )
+            
+            base_temperature = st.slider(
+                "**Base Temperature (°C)**", 
+                15, 40, digital_twin.base_temperature, 1,
+                help="STARTING TEMPERATURE: Initial condition for simulation"
+            )
+        
+        with col2:
+            st.markdown("#### 📡 SENSOR PARAMETERS")
+            noise_level = st.slider(
+                "**Sensor Noise Level**", 
+                0.0, 0.5, digital_twin.noise_level, 0.01,
+                help="SENSOR ACCURACY: Higher noise = More realistic but less accurate readings"
+            )
+            
+            simulation_steps = st.slider(
+                "**Simulation Steps**", 
+                50, 200, digital_twin.simulation_steps, 10,
+                help="DATA HISTORY: Number of data points to keep in memory"
+            )
+            
+            voltage_min = st.slider(
+                "**Min Voltage (V)**", 
+                8.0, 12.0, digital_twin.voltage_range[0], 0.1,
+                help="MINIMUM VOLTAGE: Lower operating limit"
+            )
+        
+        with col3:
+            st.markdown("#### ⚠️ FAULT SETTINGS")
+            voltage_max = st.slider(
+                "**Max Voltage (V)**", 
+                12.0, 15.0, digital_twin.voltage_range[1], 0.1,
+                help="MAXIMUM VOLTAGE: Upper operating limit"
+            )
+            
+            fault_voltage = st.slider(
+                "**Voltage Fault Limit (V)**", 
+                8.0, 12.0, digital_twin.fault_limits['voltage'], 0.1,
+                help="VOLTAGE FAULT: Trigger fault below this voltage"
+            )
+            
+            fault_temperature = st.slider(
+                "**Temperature Fault Limit (°C)**", 
+                60, 100, digital_twin.fault_limits['temperature'], 1,
+                help="TEMPERATURE FAULT: Trigger fault above this temperature"
+            )
+            
+            fault_current = st.slider(
+                "**Current Fault Limit (A)**", 
+                2.0, 6.0, digital_twin.fault_limits['current'], 0.1,
+                help="CURRENT FAULT: Trigger fault above this current"
+            )
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Update button
+        if st.button("🔄 APPLY USER PARAMETERS", use_container_width=True):
+            voltage_range = [voltage_min, voltage_max]
+            fault_limits = {'voltage': fault_voltage, 'temperature': fault_temperature, 'current': fault_current}
+            digital_twin.update_parameters(
+                voltage_range, fault_limits, load_percentage, pwm_percentage, 
+                base_temperature, noise_level, simulation_steps
+            )
+            st.success("✅ User parameters applied successfully!")
+            st.rerun()
 
 def show_load_temperature_analysis(sensor_data, digital_twin):
     """Show detailed load-temperature relationship"""
@@ -328,116 +428,86 @@ def show_load_temperature_analysis(sensor_data, digital_twin):
         st.metric("Voltage Effect", f"{voltage_heating:.3f}")
     
     with col3:
-        charging_boost = 0.6 if sensor_data['is_charging'] else 0.3
-        charging_heating = charging_boost * load_factor
-        st.metric("Charging Heat", f"{charging_heating:.3f}")
+        cooling_effect = digital_twin.pwm_percentage / 100.0 * 0.4
+        st.metric("Cooling Effect", f"{cooling_effect:.3f}")
     
     with col4:
-        total_heating = i2r_heating + voltage_heating + charging_heating
-        st.metric("Total Heating", f"{total_heating:.3f}")
+        net_heating = i2r_heating + voltage_heating - cooling_effect
+        st.metric("Net Heating", f"{net_heating:.3f}")
     
     # Load level indicator
     if digital_twin.load_percentage >= 80:
         load_class = "load-high"
-        load_status = "HIGH LOAD - HIGH TEMP"
+        load_status = "🚨 HIGH LOAD - HIGH TEMPERATURE"
     elif digital_twin.load_percentage >= 50:
         load_class = "load-medium" 
-        load_status = "MEDIUM LOAD - MED TEMP"
+        load_status = "⚠️ MEDIUM LOAD - MEDIUM TEMP"
     else:
         load_class = "load-low"
-        load_status = "LOW LOAD - LOW TEMP"
+        load_status = "✅ LOW LOAD - LOW TEMPERATURE"
     
-    st.markdown(f'<div class="{load_class}" style="text-align: center; padding: 10px; margin: 10px 0;">📊 {load_status} | Load: {digital_twin.load_percentage}% | Temp: {sensor_data["temperature"]}°C</div>', unsafe_allow_html=True)
-
-def show_compare_mode(real_data, simulated_data):
-    """Show comparison between real and simulated data"""
-    st.markdown("### 🔄 COMPARE MODE: REAL vs SIMULATED")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### 📊 REAL BATTERY DATA")
-        st.metric("Voltage", f"{real_data['voltage']}V")
-        st.metric("Current", f"{real_data['current']}A")
-        st.metric("Temperature", f"{real_data['temperature']}°C")
-        st.metric("SOC", f"{real_data['soc']}%")
-    
-    with col2:
-        st.markdown("#### 🤖 SIMULATED MODEL")
-        st.metric("Voltage", f"{simulated_data['voltage']}V", 
-                 f"{simulated_data['voltage'] - real_data['voltage']:+.2f}V")
-        st.metric("Current", f"{simulated_data['current']}A",
-                 f"{simulated_data['current'] - real_data['current']:+.2f}A")
-        st.metric("Temperature", f"{simulated_data['temperature']}°C",
-                 f"{simulated_data['temperature'] - real_data['temperature']:+.1f}°C")
-        st.metric("SOC", f"{simulated_data['soc']}%",
-                 f"{simulated_data['soc'] - real_data['soc']:+.1f}%")
-    
-    # Accuracy calculation
-    voltage_diff = abs(real_data['voltage'] - simulated_data['voltage'])
-    accuracy = max(0, 100 - (voltage_diff / real_data['voltage']) * 100)
-    st.info(f"🎯 **Model Accuracy: {accuracy:.1f}%**")
+    st.markdown(f'<div class="{load_class}" style="text-align: center; padding: 15px; margin: 10px 0; font-size: 16px; font-weight: bold;">{load_status} | User Load: {digital_twin.load_percentage}% | Current Temp: {sensor_data["temperature"]}°C</div>', unsafe_allow_html=True)
 
 def show_mobile_view(sensor_data, digital_twin):
-    """Show mobile-optimized view for field engineers - FIXED VERSION"""
+    """Show mobile-optimized view for field engineers"""
     st.markdown("### 📱 MOBILE VIEW - FIELD ENGINEER DASHBOARD")
     
-    # Main mobile container with dark theme
     with st.container():
         st.markdown('<div class="mobile-view">', unsafe_allow_html=True)
         
         # Header
-        st.markdown('<h3 class="mobile-header">🔋 FIELD MONITOR</h3>', unsafe_allow_html=True)
+        st.markdown('<h3 class="mobile-header">🔋 FIELD MONITOR - TEAM TIGONS</h3>', unsafe_allow_html=True)
         
         # Large SOC Display
-        col_soc = st.columns([1])
-        with col_soc[0]:
+        with st.container():
             st.markdown(
                 f"""
                 <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 10px; margin: 10px 0; text-align: center;">
                     <h1 style="color: #4CAF50; margin: 0; font-size: 48px;">{sensor_data['soc']}%</h1>
-                    <p style="margin: 5px 0; color: white;">State of Charge</p>
+                    <p style="margin: 5px 0; color: white; font-size: 18px;">State of Charge</p>
                 </div>
                 """, 
                 unsafe_allow_html=True
             )
         
-        # 2x2 Metrics Grid using Streamlit columns
+        # 2x2 Metrics Grid
         col1, col2 = st.columns(2)
         
         with col1:
-            # Voltage
             st.markdown(
-                f'<div class="mobile-metric"><div>⚡ Voltage</div><div style="font-weight: bold; font-size: 18px;">{sensor_data["voltage"]}V</div></div>', 
+                f'<div class="mobile-metric"><div>⚡ Voltage</div><div style="font-weight: bold; font-size: 20px;">{sensor_data["voltage"]}V</div></div>', 
                 unsafe_allow_html=True
             )
             
-            # Temperature with color coding
-            temp_color = "#FF6B6B" if sensor_data['temperature'] > 40 else "#4CAF50"
+            temp_color = "#FF6B6B" if sensor_data['temperature'] > 45 else "#FFD93D" if sensor_data['temperature'] > 35 else "#4CAF50"
             st.markdown(
-                f'<div class="mobile-metric"><div>🌡️ Temperature</div><div style="font-weight: bold; font-size: 18px; color: {temp_color};">{sensor_data["temperature"]}°C</div></div>', 
+                f'<div class="mobile-metric"><div>🌡️ Temperature</div><div style="font-weight: bold; font-size: 20px; color: {temp_color};">{sensor_data["temperature"]}°C</div></div>', 
                 unsafe_allow_html=True
             )
         
         with col2:
-            # Current
             st.markdown(
-                f'<div class="mobile-metric"><div>🔌 Current</div><div style="font-weight: bold; font-size: 18px;">{sensor_data["current"]}A</div></div>', 
+                f'<div class="mobile-metric"><div>🔌 Current</div><div style="font-weight: bold; font-size: 20px;">{sensor_data["current"]}A</div></div>', 
                 unsafe_allow_html=True
             )
             
-            # Health Score
             st.markdown(
-                f'<div class="mobile-metric"><div>💪 Health</div><div style="font-weight: bold; font-size: 18px;">{sensor_data["health_score"]}%</div></div>', 
+                f'<div class="mobile-metric"><div>💪 Health</div><div style="font-weight: bold; font-size: 20px;">{sensor_data["health_score"]}%</div></div>', 
                 unsafe_allow_html=True
             )
         
-        # Load Status
-        load_status_color = "#FF6B6B" if digital_twin.load_percentage > 70 else "#FFD93D" if digital_twin.load_percentage > 40 else "#6BCF7F"
+        # User Parameters Status
         st.markdown(
             f"""
-            <div style="background: {load_status_color}; padding: 10px; border-radius: 5px; margin: 10px 0; text-align: center;">
-                <div style="font-weight: bold; color: {'white' if digital_twin.load_percentage > 70 else 'black'};">📊 LOAD: {digital_twin.load_percentage}%</div>
+            <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 10px; margin: 10px 0;">
+                <div style="text-align: center; color: white;">
+                    <div style="font-size: 14px; margin-bottom: 5px;">USER PARAMETERS</div>
+                    <div style="display: flex; justify-content: space-around; font-size: 12px;">
+                        <div>📊 Load: {digital_twin.load_percentage}%</div>
+                        <div>❄️ PWM: {digital_twin.pwm_percentage}%</div>
+                        <div>🌡️ Base: {digital_twin.base_temperature}°C</div>
+                    </div>
+                </div>
             </div>
             """, 
             unsafe_allow_html=True
@@ -450,7 +520,7 @@ def show_mobile_view(sensor_data, digital_twin):
         st.markdown(
             f"""
             <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 10px; margin: 10px 0; text-align: center;">
-                <div style="color: {mode_color}; font-weight: bold; font-size: 16px;">{mode_text}</div>
+                <div style="color: {mode_color}; font-weight: bold; font-size: 18px;">{mode_text}</div>
                 <div style="font-size: 12px; opacity: 0.8; color: white;">Last Update: {sensor_data['timestamp']}</div>
             </div>
             """, 
@@ -461,14 +531,17 @@ def show_mobile_view(sensor_data, digital_twin):
         
         # Quick actions for field engineers
         st.markdown("#### 🎯 QUICK ACTIONS")
-        action_col1, action_col2 = st.columns(2)
+        action_col1, action_col2, action_col3 = st.columns(3)
         with action_col1:
-            if st.button("🔄 Refresh Data", use_container_width=True):
+            if st.button("🔄 Refresh", use_container_width=True):
                 st.rerun()
         with action_col2:
             if st.button("📋 Log Issue", use_container_width=True):
-                digital_twin.log_event("Field engineer logged issue", "WARNING")
+                digital_twin.log_event("Field engineer logged issue via mobile", "WARNING")
                 st.success("Issue logged successfully!")
+        with action_col3:
+            if st.button("📊 Parameters", use_container_width=True):
+                st.info("Adjust parameters in sidebar")
 
 def main():
     # Initialize digital twin
@@ -488,9 +561,12 @@ def main():
     st.markdown('<h1 class="main-header">🔋 EV DIGITAL TWIN PLATFORM</h1>', unsafe_allow_html=True)
     st.markdown('<h3 style="text-align: center; color: #5c6bc0; margin-bottom: 1rem;">🐅 Team TIGONS | KPIT Sparkle 2025</h3>', unsafe_allow_html=True)
     
-    # ==================== SIDEBAR - CONTROL PANEL ====================
+    # ==================== USER INPUT SECTION ====================
+    show_user_input_section(st.session_state.digital_twin)
+    
+    # ==================== SIDEBAR - VIEW CONTROLS ====================
     with st.sidebar:
-        st.markdown("### 🎮 SMART CONTROL PANEL")
+        st.markdown("### 🎮 VIEW CONTROLS")
         
         # Operation Mode
         mode = st.radio(
@@ -505,43 +581,9 @@ def main():
             st.session_state.digital_twin.log_event(event, "SUCCESS")
         
         st.markdown("---")
-        st.markdown("### ⚙️ CONFIGURABLE PARAMETERS")
-        
-        # Configurable Inputs
-        voltage_min = st.slider("Min Voltage (V)", 8.0, 12.0, 9.0, 0.1)
-        voltage_max = st.slider("Max Voltage (V)", 12.0, 15.0, 13.0, 0.1)
-        
-        load_percentage = st.slider("Load Percentage (%)", 10, 100, 50, 5,
-                                  help="🔥 SYSTEM STRESS: Higher load = More current = More heat (I²R losses)")
-        pwm_percentage = st.slider("PWM Cooling (%)", 0, 100, 75, 5,
-                                 help="❄️ COOLING SYSTEM: Higher PWM = Better cooling = Lower temperature")
-        base_temperature = st.slider("Base Temperature (°C)", 15, 40, 25, 1,
-                                   help="🌡️ STARTING TEMPERATURE: Initial condition for simulation")
-        noise_level = st.slider("Sensor Noise", 0.0, 0.5, 0.1, 0.01,
-                              help="📡 SENSOR ACCURACY: Higher noise = More realistic sensor readings")
-        simulation_steps = st.slider("Simulation Steps", 50, 200, 100, 10,
-                                   help="⏱️ SIMULATION LENGTH: Number of data points to keep")
-        
-        # Fault Limits Configuration
-        st.markdown("### ⚠️ FAULT LIMITS")
-        fault_voltage = st.slider("Voltage Fault Limit (V)", 8.0, 12.0, 10.5, 0.1)
-        fault_temperature = st.slider("Temperature Fault Limit (°C)", 60, 100, 85, 1)
-        fault_current = st.slider("Current Fault Limit (A)", 2.0, 6.0, 4.0, 0.1)
-        
-        # Update parameters
-        if st.button("🔄 APPLY PARAMETERS", use_container_width=True):
-            voltage_range = [voltage_min, voltage_max]
-            fault_limits = {'voltage': fault_voltage, 'temperature': fault_temperature, 'current': fault_current}
-            st.session_state.digital_twin.update_parameters(
-                voltage_range, fault_limits, load_percentage, pwm_percentage, 
-                base_temperature, noise_level, simulation_steps
-            )
-            st.success("Parameters updated successfully!")
-        
-        st.markdown("---")
         st.markdown("### 🎯 VIEW MODES")
         st.session_state.show_compare = st.checkbox("🔀 COMPARE MODE")
-        st.session_state.show_mobile = st.checkbox("📱 MOBILE VIEW")
+        st.session_state.show_mobile = st.checkbox("📱 MOBILE VIEW", help="Optimized view for field engineers")
         
         st.session_state.digital_twin.fault_injected = st.checkbox("⚠️ INJECT FAULT SCENARIOS")
         
@@ -556,7 +598,7 @@ def main():
 
     # ==================== MAIN DASHBOARD ====================
     
-    # Generate live data with configurable parameters
+    # Generate live data with USER INPUT parameters
     sensor_data = generate_sensor_data(
         st.session_state.last_soc, 
         st.session_state.is_charging,
@@ -570,7 +612,7 @@ def main():
     st.session_state.sensor_data.append(sensor_data)
     st.session_state.cycle_count += 1
     
-    # Manage data history
+    # Manage data history based on USER INPUT
     if len(st.session_state.sensor_data) > st.session_state.digital_twin.simulation_steps:
         st.session_state.sensor_data = st.session_state.sensor_data[-st.session_state.digital_twin.simulation_steps:]
     
@@ -578,21 +620,36 @@ def main():
     
     if st.session_state.show_compare:
         st.markdown('<div class="compare-mode">', unsafe_allow_html=True)
-        # Generate simulated data for comparison (slightly different parameters)
         simulated_data = generate_sensor_data(
-            st.session_state.last_soc - 2,  # Slight difference
+            st.session_state.last_soc - 2,
             st.session_state.is_charging,
             st.session_state.digital_twin
         )
-        show_compare_mode(sensor_data, simulated_data)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### 📊 REAL BATTERY DATA")
+            st.metric("Voltage", f"{sensor_data['voltage']}V")
+            st.metric("Current", f"{sensor_data['current']}A")
+            st.metric("Temperature", f"{sensor_data['temperature']}°C")
+            st.metric("SOC", f"{sensor_data['soc']}%")
+        
+        with col2:
+            st.markdown("#### 🤖 SIMULATED MODEL")
+            st.metric("Voltage", f"{simulated_data['voltage']}V", 
+                     f"{simulated_data['voltage'] - sensor_data['voltage']:+.2f}V")
+            st.metric("Current", f"{simulated_data['current']}A",
+                     f"{simulated_data['current'] - sensor_data['current']:+.2f}A")
+        
         st.markdown('</div>', unsafe_allow_html=True)
     
+    # ==================== MOBILE VIEW ====================
     if st.session_state.show_mobile:
         show_mobile_view(sensor_data, st.session_state.digital_twin)
     
-    # ==================== SECTION 1: SIMULATION AREA ====================
-    if not st.session_state.show_mobile:  # Don't show in mobile view
-        st.markdown('<div class="section-header">🎯 SIMULATION AREA</div>', unsafe_allow_html=True)
+    # ==================== DESKTOP VIEW ====================
+    if not st.session_state.show_mobile:
+        st.markdown('<div class="section-header">🎯 SIMULATION RESULTS</div>', unsafe_allow_html=True)
         
         # LOAD-TEMPERATURE ANALYSIS
         show_load_temperature_analysis(sensor_data, st.session_state.digital_twin)
@@ -600,7 +657,7 @@ def main():
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            # Battery Visualization with Mode-based UI
+            # Battery Visualization
             mode_class = "mode-charging" if sensor_data['is_charging'] else "mode-discharging"
             st.markdown(f"""
             <div class="{mode_class}" style="padding: 20px; border-radius: 15px; margin: 10px 0;">
@@ -613,23 +670,19 @@ def main():
                         {sensor_data['soc']}%
                     </div>
                 </div>
-                <p>Health: {sensor_data['health_score']}% | Temp: {sensor_data['temperature']}°C</p>
-                <p>Voltage Range: {st.session_state.digital_twin.voltage_range[0]}V - {st.session_state.digital_twin.voltage_range[1]}V</p>
-                <p>Current Load: <strong>{st.session_state.digital_twin.load_percentage}%</strong> | PWM Cooling: <strong>{st.session_state.digital_twin.pwm_percentage}%</strong></p>
+                <p><strong>User Parameters Applied:</strong></p>
+                <p>• Load: {st.session_state.digital_twin.load_percentage}% | PWM: {st.session_state.digital_twin.pwm_percentage}%</p>
+                <p>• Base Temp: {st.session_state.digital_twin.base_temperature}°C | Noise: {st.session_state.digital_twin.noise_level}</p>
             </div>
             """, unsafe_allow_html=True)
         
         with col2:
-            # AI PREDICTIVE INSIGHTS
+            # PREDICTIVE INSIGHTS
             st.markdown("### 🤖 PREDICTIVE INSIGHTS")
             
             predicted_temp = st.session_state.digital_twin.predict_temperature(
                 sensor_data['temperature'], sensor_data['current'], 
                 sensor_data['voltage'], sensor_data['is_charging']
-            )
-            
-            discharge_time = st.session_state.digital_twin.predict_discharge_time(
-                sensor_data['soc'], sensor_data['current']
             )
             
             st.markdown(f"""
@@ -642,95 +695,53 @@ def main():
             </div>
             """, unsafe_allow_html=True)
             
+            discharge_time = st.session_state.digital_twin.predict_discharge_time(
+                sensor_data['soc'], sensor_data['current']
+            )
+            
             st.markdown(f"""
             <div class="prediction-card">
                 <div>⏱️ Discharge Time:</div>
                 <div style="font-size: 18px; font-weight: bold;">{discharge_time}</div>
             </div>
             """, unsafe_allow_html=True)
-            
-            degradation_rate = 0.02 + max(0, sensor_data['temperature'] - 30) * 0.005 + (st.session_state.digital_twin.load_percentage/100.0) * 0.01
-            st.markdown(f"""
-            <div class="prediction-card">
-                <div>📉 Degradation Rate:</div>
-                <div style="font-size: 18px; font-weight: bold;">+{degradation_rate:.3f}% per cycle</div>
-                <div style="font-size: 12px;">Load contributes: +{(st.session_state.digital_twin.load_percentage/100.0) * 0.01:.3f}%</div>
-            </div>
-            """, unsafe_allow_html=True)
         
         with col3:
-            # EFFICIENCY & POWER INDICATOR
+            # EFFICIENCY METRICS
             st.markdown("### ⚡ EFFICIENCY METRICS")
             
             st.metric("Energy Efficiency", f"{sensor_data['efficiency']}%")
-            st.metric("Energy Consumed", f"{sensor_data['energy_consumed']} Wh")
-            st.metric("Charge Cycles", f"{sensor_data['cycles_completed']}")
             st.metric("Power Output", f"{sensor_data['power']} W")
-            st.metric("Load Level", f"{st.session_state.digital_twin.load_percentage}%")
+            st.metric("Health Score", f"{sensor_data['health_score']}%")
+            st.metric("Energy Consumed", f"{sensor_data['energy_consumed']} Wh")
     
-    # ==================== SECTION 2: DATA OUTPUT PANEL ====================
-    if not st.session_state.show_mobile:  # Don't show in mobile view
-        st.markdown('<div class="section-header">📊 DATA OUTPUT PANEL</div>', unsafe_allow_html=True)
+    # ==================== DATA VISUALIZATION ====================
+    if not st.session_state.show_mobile:
+        st.markdown('<div class="section-header">📊 DATA VISUALIZATION</div>', unsafe_allow_html=True)
         
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # SMART TREND PANEL - Combined Charts
-            st.markdown("### 📈 SMART TREND ANALYSIS")
+        if len(st.session_state.sensor_data) > 1:
+            df = pd.DataFrame(st.session_state.sensor_data)
             
-            if len(st.session_state.sensor_data) > 1:
-                df = pd.DataFrame(st.session_state.sensor_data)
-                
-                # Display multiple charts
-                tab1, tab2, tab3, tab4 = st.tabs(["Voltage & SOC", "Temperature Trend", "Load Effects", "Performance"])
-                
-                with tab1:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.line_chart(df['voltage'], use_container_width=True)
-                        st.caption("⚡ Voltage Profile")
-                    with col2:
-                        st.line_chart(df['soc'], use_container_width=True)
-                        st.caption("🔋 State of Charge")
-                
-                with tab2:
-                    st.area_chart(df['temperature'], use_container_width=True)
-                    st.caption("🌡️ Temperature Trend - Affected by Load")
-                
-                with tab3:
-                    st.line_chart(df[['current', 'temperature']], use_container_width=True)
-                    st.caption("📊 Current vs Temperature - Load Relationship")
-                
-                with tab4:
-                    st.line_chart(df[['voltage', 'current']], use_container_width=True)
-                    st.caption("⚡ Combined Performance Metrics")
-        
-        with col2:
-            # EVENT LOG / ALERT TIMELINE
-            st.markdown("### 📋 EVENT LOG")
+            tab1, tab2, tab3 = st.tabs(["📈 Voltage & SOC", "🌡️ Temperature Trend", "⚡ Performance"])
             
-            # Display recent events
-            recent_events = st.session_state.digital_twin.event_log[-8:]
-            for event in reversed(recent_events):
-                status_class = ""
-                if event['status'] == 'DANGER':
-                    status_class = "alert-danger"
-                elif event['status'] == 'WARNING':
-                    status_class = "alert-warning"
-                elif event['status'] == 'SUCCESS':
-                    status_class = "alert-success"
-                else:
-                    status_class = "alert-timeline"
-                
-                st.markdown(f"""
-                <div class="{status_class}">
-                    <small><strong>{event['timestamp']}</strong></small><br>
-                    {event['event']}<br>
-                    <small>Status: {event['status']}</small>
-                </div>
-                """, unsafe_allow_html=True)
+            with tab1:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.line_chart(df['voltage'], use_container_width=True)
+                    st.caption("⚡ Voltage Profile (User Input Based)")
+                with col2:
+                    st.line_chart(df['soc'], use_container_width=True)
+                    st.caption("🔋 State of Charge")
+            
+            with tab2:
+                st.area_chart(df['temperature'], use_container_width=True)
+                st.caption("🌡️ Temperature Trend - Affected by User Load Input")
+            
+            with tab3:
+                st.line_chart(df[['current', 'efficiency']], use_container_width=True)
+                st.caption("⚡ Current vs Efficiency")
     
-    # ==================== SECTION 3: EXPORT & REPORTS ====================
+    # ==================== EXPORT & REPORTS ====================
     st.markdown('<div class="section-header">📄 EXPORT & ANALYSIS</div>', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
@@ -745,7 +756,10 @@ def main():
     with col2:
         if st.button("📄 GENERATE PDF REPORT", use_container_width=True):
             pdf_report = create_pdf_report(sensor_data, st.session_state.digital_twin)
-            st.text_area("📋 PERFORMANCE REPORT (Copy this data):", pdf_report, height=300)
+            # Show report preview
+            st.text_area("📋 REPORT PREVIEW (Copy or Download below):", pdf_report, height=300)
+            # Provide download link
+            st.markdown(create_pdf_download(pdf_report, "EV_Battery_Report.txt"), unsafe_allow_html=True)
             st.session_state.digital_twin.log_event("PDF Report Generated", "SUCCESS")
     
     with col3:
@@ -753,18 +767,15 @@ def main():
             st.info("🔄 Live data streaming active - Real-time monitoring enabled")
             st.session_state.digital_twin.log_event("Live data streaming enabled", "INFO")
     
-    # ==================== AI INSIGHTS SECTION ====================
+    # ==================== AI INSIGHTS ====================
     st.markdown('<div class="section-header">🤖 AI-POWERED ANALYTICS</div>', unsafe_allow_html=True)
     
     insight_col1, insight_col2, insight_col3 = st.columns(3)
     
     with insight_col1:
-        # Risk score now includes load factor
         load_risk = st.session_state.digital_twin.load_percentage / 100.0 * 0.3
         temp_risk = max(0, sensor_data['temperature'] - 30) * 0.02
-        soc_risk = (100 - sensor_data['soc']) * 0.01
-        
-        risk_score = min(1.0, load_risk + temp_risk + soc_risk)
+        risk_score = min(1.0, load_risk + temp_risk)
         
         if risk_score < 0.25:
             st.success("✅ **LOW RISK**\n\nOptimal operating conditions")
@@ -774,37 +785,31 @@ def main():
             st.error("🚨 **HIGH RISK**\n\nImmediate action required")
         
         st.metric("AI Risk Score", f"{risk_score:.2f}")
-        st.metric("Load Contribution", f"{(load_risk/risk_score)*100:.1f}%")
     
     with insight_col2:
-        # Predictive maintenance with load effects
-        load_degradation = st.session_state.digital_twin.load_percentage / 100.0 * 0.5
-        temp_degradation = max(0, sensor_data['temperature'] - 30) * 0.1
-        
-        remaining_cycles = int((sensor_data['health_score'] - 70) / (0.02 + load_degradation + temp_degradation))
         st.info(f"""
         **🔧 PREDICTIVE MAINTENANCE**
         
-        • Remaining cycles: **{remaining_cycles}**
-        • Load degradation: **{load_degradation:.2f}% per cycle**
-        • Temp degradation: **{temp_degradation:.2f}% per cycle**
-        • System efficiency: **{sensor_data['efficiency']}%**
+        • User Load: **{st.session_state.digital_twin.load_percentage}%**
+        • Cooling: **{st.session_state.digital_twin.pwm_percentage}%**
+        • Base Temp: **{st.session_state.digital_twin.base_temperature}°C**
+        • Efficiency: **{sensor_data['efficiency']}%**
         """)
     
     with insight_col3:
+        recommendation = "Reduce load" if st.session_state.digital_twin.load_percentage > 70 else "Optimal load"
         st.success(f"""
         **💡 SMART OPTIMIZATION**
         
         • Current Load: **{st.session_state.digital_twin.load_percentage}%**
+        • Recommendation: **{recommendation}**
+        • Optimal Temp: **< 35°C**
         • Maintain SOC: **20-80%**
-        • Optimal temp: **< 35°C**
-        • Current efficiency: **{sensor_data['efficiency']}%**
-        • Recommended: **{'Reduce load' if st.session_state.digital_twin.load_percentage > 70 else 'Optimal load'}**
         """)
     
     # COMPETITION FOOTER
     st.markdown("---")
-    st.success("🏆 **KPIT SPARKLE 2025 READY** - Industry-Grade EV Digital Twin with Real-time AI Predictive Analytics & Professional Monitoring System")
+    st.success("🏆 **KPIT SPARKLE 2025 READY** - Industry-Grade EV Digital Twin with Real User Input Control & Professional Monitoring System")
     
     # AUTO-REFRESH
     refresh_delay = max(1, 6 - st.session_state.digital_twin.load_percentage / 20)
